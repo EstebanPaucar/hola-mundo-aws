@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AWS Demo - Sistemas Distribuidos</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #333;
+        }
+        .container {
+            background-color: rgba(255, 255, 255, 0.95);
+            padding: 40px 60px;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            text-align: center;
+            max-width: 500px;
+            transition: transform 0.3s ease;
+        }
+        .container:hover {
+            transform: translateY(-5px);
+        }
+        h1 {
+            color: #2d3748;
+            margin-bottom: 10px;
+            font-size: 2.5rem;
+        }
+        p {
+            color: #718096;
+            font-size: 1.1rem;
+            margin-bottom: 30px;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 8px 16px;
+            background-color: #48bb78;
+            color: white;
+            border-radius: 50px;
+            font-weight: bold;
+            font-size: 0.9rem;
+            box-shadow: 0 4px 6px rgba(72, 187, 120, 0.3);
+        }
+        .icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <span class="icon">🚀</span>
+        <h1>¡Hola Mundo!</h1>
+        <p>Aplicación corriendo en contenedor Docker sobre AWS Auto Scaling Group.</p>
+        <div class="status-badge">Estado: Activo</div>
+        
+        <br><br>
+        <small style="color: #a0aec0;">ID de Instancia: <script>document.write(Math.floor(Math.random() * 10000))</script></small>
+    </div>
+</body>
+</html>
