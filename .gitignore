@@ -1,0 +1,9 @@
+# Ignorar carpeta de proveedores (El archivo pesado)
+.terraform/
+
+# Ignorar archivos de estado (Seguridad)
+*.tfstate
+*.tfstate.backup
+
+# Ignorar archivos de variables con claves (Por si acaso creas uno)
+*.tfvars

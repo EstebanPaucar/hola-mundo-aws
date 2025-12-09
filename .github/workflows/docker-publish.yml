@@ -1,26 +1,46 @@
-name: Build and Push Docker Image
+name: Build and Push Docker Image & Deploy
 
 on:
   push:
     branches: [ "main" ]
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
+    # 1. Bajar código
     - name: Checkout code
       uses: actions/checkout@v3
 
+    # 2. Login Docker Hub
     - name: Log in to Docker Hub
       uses: docker/login-action@v2
       with:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
 
+    # 3. Construir y Subir Imagen
     - name: Build and push Docker image
       uses: docker/build-push-action@v4
       with:
         context: .
         push: true
         tags: ${{ secrets.DOCKER_USERNAME }}/hola-mundo-aws:latest
-        
+
+    # --- PARTE NUEVA: DESPLIEGUE A AWS (MODO ACADEMY) ---
+
+    # 4. Configurar credenciales AWS (Incluyendo Session Token)
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }} # ¡Vital para AWS Academy!
+        aws-region: us-east-1
+
+    # 5. Ordenar el refresco de instancias
+    - name: Refresh ASG Instances
+      run: |
+        aws autoscaling start-instance-refresh \
+          --auto-scaling-group-name hola-mundo-asg-prod \
+          --preferences '{"InstanceWarmup": 60, "MinHealthyPercentage": 50}'
