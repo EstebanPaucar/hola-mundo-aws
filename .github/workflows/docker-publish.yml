@@ -42,5 +42,5 @@ jobs:
     - name: Refresh ASG Instances
       run: |
         aws autoscaling start-instance-refresh \
-          --auto-scaling-group-name hola-mundo-asg-prod \
+          --auto-scaling-group-name frontend-asg-prod \
           --preferences '{"InstanceWarmup": 60, "MinHealthyPercentage": 50}'
