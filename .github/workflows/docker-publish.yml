@@ -19,17 +19,16 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # 3. Construir y Subir FRONTEND (Tu configuración actual)
+      # 3. Construir y Subir FRONTEND
       - name: Build and push Frontend
         uses: docker/build-push-action@v4
         with:
-          context: . 
-          # Asegúrate de que el Dockerfile del frontend esté en la raíz o ajusta el context
-          file: Dockerfile 
+          context: .
+          file: Dockerfile
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/hola-mundo-aws:latest
 
-      # 4. Construir y Subir BACKEND (NUEVO)
+      # 4. Construir y Subir BACKEND
       - name: Build and push Backend
         uses: docker/build-push-action@v4
         with:
@@ -38,16 +37,23 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/hola-mundo-backend:latest
 
-          # NUEVO PASO: Despliegue con Terraform Multi-Cuenta
+      # --- AQUÍ ESTÁ LA SOLUCIÓN AL ERROR 127 ---
+      # 5. Instalar Terraform en la máquina virtual
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_wrapper: false
+
+      # 6. Despliegue con Terraform Multi-Cuenta
       - name: Terraform Init and Apply
         env:
-          # Credenciales Cuenta 1 (Frontend) - AWS las detecta automático
+          # Credenciales Cuenta 1
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
           AWS_REGION: 'us-east-1'
           
-          # Credenciales Cuenta 2 (Backend) - Se pasan como variables de Terraform
+          # Credenciales Cuenta 2
           TF_VAR_aws_access_key_2: ${{ secrets.AWS_ACCESS_KEY_ID_2 }}
           TF_VAR_aws_secret_key_2: ${{ secrets.AWS_SECRET_ACCESS_KEY_2 }}
           TF_VAR_aws_session_token_2: ${{ secrets.AWS_SESSION_TOKEN_2 }}
