@@ -78,7 +78,10 @@ resource "aws_launch_template" "frontend_lt" {
 # 3. Frontend ALB
 data "aws_vpc" "default" { default = true }
 data "aws_subnets" "default" {
-  filter { name = "vpc-id"; values = [data.aws_vpc.default.id] }
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
 }
 
 resource "aws_lb" "frontend_lb" {
@@ -170,7 +173,10 @@ data "aws_vpc" "backend_vpc" {
 
 data "aws_subnets" "backend_subnets" {
   provider = aws.backend_account
-  filter { name = "vpc-id"; values = [data.aws_vpc.backend_vpc.id] }
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.backend_vpc.id]
+  }
 }
 
 # 2. Backend Security
