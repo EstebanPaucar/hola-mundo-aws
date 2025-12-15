@@ -37,3 +37,20 @@ jobs:
           file: ./backend/Dockerfile
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/hola-mundo-backend:latest
+
+          # NUEVO PASO: Despliegue con Terraform Multi-Cuenta
+      - name: Terraform Init and Apply
+        env:
+          # Credenciales Cuenta 1 (Frontend) - AWS las detecta automático
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+          AWS_REGION: 'us-east-1'
+          
+          # Credenciales Cuenta 2 (Backend) - Se pasan como variables de Terraform
+          TF_VAR_aws_access_key_2: ${{ secrets.AWS_ACCESS_KEY_ID_2 }}
+          TF_VAR_aws_secret_key_2: ${{ secrets.AWS_SECRET_ACCESS_KEY_2 }}
+          TF_VAR_aws_session_token_2: ${{ secrets.AWS_SESSION_TOKEN_2 }}
+        run: |
+          terraform init
+          terraform apply -auto-approve

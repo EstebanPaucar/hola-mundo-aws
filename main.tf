@@ -1,224 +1,274 @@
-# --- VARIABLES PARA LA CUENTA 2 (BACKEND) ---
-variable "access_key_2" { type = string }
-variable "secret_key_2" { type = string }
-variable "session_token_2" { type = string }
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
 
-# --- PROVEEDOR 1: CUENTA FRONTEND (Usa tus credenciales de consola actuales) ---
+# ==========================================
+# PROVIDER CONFIGURATION (2 ACCOUNTS)
+# ==========================================
+
+# ACCOUNT 1: FRONTEND (Uses standard environment variables)
 provider "aws" {
   region = "us-east-1"
 }
 
-# --- PROVEEDOR 2: CUENTA BACKEND (Usa las variables) ---
+# ACCOUNT 2: BACKEND (Uses an alias and specific variables)
 provider "aws" {
-  alias      = "backend"
+  alias      = "backend_account"
   region     = "us-east-1"
-  access_key = var.access_key_2
-  secret_key = var.secret_key_2
-  token      = var.session_token_2
+  
+  # These variables are populated from GitHub Actions
+  access_key = var.aws_access_key_2
+  secret_key = var.aws_secret_key_2
+  token      = var.aws_session_token_2
 }
 
-# =============================================================================
-# INFRAESTRUCTURA CUENTA 1: FRONTEND (Load Balancer + ASG + 3 Políticas)
-# =============================================================================
+# Define variables to receive Account 2 credentials
+variable "aws_access_key_2" { type = string }
+variable "aws_secret_key_2" { type = string }
+variable "aws_session_token_2" { type = string }
 
-# 1. Datos de Red (Cuenta 1)
-data "aws_vpc" "default" {
-  default = true
-}
-data "aws_subnets" "default" {
-  filter {
-    name   = "vpc-id"
-    values = [data.aws_vpc.default.id]
-  }
-}
 
-# 2. Seguridad Frontend
-resource "aws_security_group" "web_sg" {
-  name        = "hola_mundo_sg"
-  description = "Frontend SG"
-  vpc_id      = data.aws_vpc.default.id
+# ==========================================
+# PART A: FRONTEND INFRASTRUCTURE (ACCOUNT 1)
+# ==========================================
+
+# 1. Frontend Security
+resource "aws_security_group" "frontend_sg" {
+  name        = "frontend-sg"
+  description = "Allow HTTP for Frontend"
+
   ingress {
-    from_port = 80
-    to_port = 80
-    protocol = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-  ingress {
-    from_port = 22
-    to_port = 22
-    protocol = "tcp"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
   egress {
-    from_port = 0
-    to_port = 0
-    protocol = "-1"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
 }
 
-# 3. Launch Template Frontend
-resource "aws_launch_template" "app_lt" {
-  name_prefix   = "frontend-lt"
-  image_id      = "ami-0ebfd941bbafe70c6"
+# 2. Frontend Launch Template
+resource "aws_launch_template" "frontend_lt" {
+  name_prefix   = "frontend-lt-"
+  image_id      = "ami-0ebfd941bbafe70c6" # Amazon Linux 2023
   instance_type = "t2.micro"
-  vpc_security_group_ids = [aws_security_group.web_sg.id]
+  vpc_security_group_ids = [aws_security_group.frontend_sg.id]
 
   user_data = base64encode(<<-EOF
-              #!/bin/bash
-              yum update -y
-              yum install -y docker
-              service docker start
-              usermod -a -G docker ec2-user
-              docker run -d -p 80:80 ehpaucar/hola-mundo-aws:latest
-              EOF
+    #!/bin/bash
+    yum update -y
+    yum install -y docker
+    service docker start
+    usermod -a -G docker ec2-user
+    # FRONTEND IMAGE
+    docker run -d -p 80:80 ehpaucar/hola-mundo-aws:latest
+  EOF
   )
 }
 
-# 4. Load Balancer Frontend
-resource "aws_lb" "app_lb" {
+# 3. Frontend ALB
+data "aws_vpc" "default" { default = true }
+data "aws_subnets" "default" {
+  filter { name = "vpc-id"; values = [data.aws_vpc.default.id] }
+}
+
+resource "aws_lb" "frontend_lb" {
   name               = "frontend-lb"
   internal           = false
   load_balancer_type = "application"
-  security_groups    = [aws_security_group.web_sg.id]
+  security_groups    = [aws_security_group.frontend_sg.id]
   subnets            = data.aws_subnets.default.ids
 }
 
-resource "aws_lb_target_group" "app_tg" {
+resource "aws_lb_target_group" "frontend_tg" {
   name     = "frontend-tg"
   port     = 80
   protocol = "HTTP"
   vpc_id   = data.aws_vpc.default.id
+  health_check { path = "/" }
 }
 
-resource "aws_lb_listener" "front_end" {
-  load_balancer_arn = aws_lb.app_lb.arn
+resource "aws_lb_listener" "frontend_listener" {
+  load_balancer_arn = aws_lb.frontend_lb.arn
   port              = "80"
   protocol          = "HTTP"
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.app_tg.arn
+    target_group_arn = aws_lb_target_group.frontend_tg.arn
   }
 }
 
-# 5. ASG Frontend (2 a 3 instancias)
-resource "aws_autoscaling_group" "app_asg" {
-  name                = "frontend-asg-prod"
-  desired_capacity    = 2
-  max_size            = 3
-  min_size            = 2
+# 4. Frontend ASG (With the 3 requested rules)
+resource "aws_autoscaling_group" "frontend_asg" {
+  name                = "frontend-asg"
   vpc_zone_identifier = data.aws_subnets.default.ids
-  target_group_arns   = [aws_lb_target_group.app_tg.arn]
+  target_group_arns   = [aws_lb_target_group.frontend_tg.arn]
+  desired_capacity    = 2
+  min_size            = 2
+  max_size            = 3
+
   launch_template {
-    id      = aws_launch_template.app_lt.id
+    id      = aws_launch_template.frontend_lt.id
     version = "$Latest"
   }
 }
 
-# 6. Políticas Frontend (Red, CPU, Memoria)
-resource "aws_autoscaling_policy" "network_policy" {
-  name                   = "escala-por-red"
-  autoscaling_group_name = aws_autoscaling_group.app_asg.name
+# Frontend Scaling Policies
+resource "aws_autoscaling_policy" "front_cpu" {
+  name                   = "front-cpu-policy"
+  autoscaling_group_name = aws_autoscaling_group.frontend_asg.name
   policy_type            = "TargetTrackingScaling"
   target_tracking_configuration {
-    predefined_metric_specification {
-      predefined_metric_type = "ASGAverageNetworkIn"
-    }
+    predefined_metric_specification { predefined_metric_type = "ASGAverageCPUUtilization" }
+    target_value = 50.0
+  }
+}
+
+resource "aws_autoscaling_policy" "front_net" {
+  name                   = "front-net-policy"
+  autoscaling_group_name = aws_autoscaling_group.frontend_asg.name
+  policy_type            = "TargetTrackingScaling"
+  target_tracking_configuration {
+    predefined_metric_specification { predefined_metric_type = "ASGAverageNetworkIn" }
     target_value = 500000.0
   }
 }
-resource "aws_autoscaling_policy" "cpu_policy" {
-  name                   = "escala-por-cpu"
-  autoscaling_group_name = aws_autoscaling_group.app_asg.name
-  policy_type            = "TargetTrackingScaling"
-  target_tracking_configuration {
-    predefined_metric_specification {
-      predefined_metric_type = "ASGAverageCPUUtilization"
-    }
-    target_value = 70.0
-  }
-}
-resource "aws_autoscaling_policy" "memory_policy" {
-  name                   = "escala-por-memoria"
-  autoscaling_group_name = aws_autoscaling_group.app_asg.name
+
+resource "aws_autoscaling_policy" "front_mem" {
+  name                   = "front-mem-policy"
+  autoscaling_group_name = aws_autoscaling_group.frontend_asg.name
   policy_type            = "TargetTrackingScaling"
   target_tracking_configuration {
     customized_metric_specification {
-      metric_name = "mem_used_percent"
+      metric_name = "MemoryUtilization"
       namespace   = "CWAgent"
       statistic   = "Average"
     }
-    target_value = 80.0
+    target_value = 60.0
   }
 }
 
-# =============================================================================
-# INFRAESTRUCTURA CUENTA 2: BACKEND (Aislado)
-# =============================================================================
 
-# 1. Datos de Red (Cuenta 2 - Usando provider backend)
-data "aws_vpc" "backend_default" {
-  provider = aws.backend
+# ==========================================
+# PART B: BACKEND INFRASTRUCTURE (ACCOUNT 2)
+# ==========================================
+
+# 1. Network Data Account 2 (Using provider alias)
+data "aws_vpc" "backend_vpc" {
+  provider = aws.backend_account 
   default  = true
 }
+
 data "aws_subnets" "backend_subnets" {
-  provider = aws.backend
-  filter {
-    name   = "vpc-id"
-    values = [data.aws_vpc.backend_default.id]
-  }
+  provider = aws.backend_account
+  filter { name = "vpc-id"; values = [data.aws_vpc.backend_vpc.id] }
 }
 
-# 2. Seguridad Backend
+# 2. Backend Security
 resource "aws_security_group" "backend_sg" {
-  provider    = aws.backend
+  provider    = aws.backend_account
   name        = "backend-sg"
-  description = "Backend SG"
-  vpc_id      = data.aws_vpc.backend_default.id
+  description = "Allow HTTP Backend"
+  vpc_id      = data.aws_vpc.backend_vpc.id
 
   ingress {
-    from_port = 80
-    to_port = 80
-    protocol = "tcp"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
   egress {
-    from_port = 0
-    to_port = 0
-    protocol = "-1"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
 }
 
-# 3. Launch Template Backend
+# 3. Backend Launch Template
 resource "aws_launch_template" "backend_lt" {
-  provider      = aws.backend
-  name_prefix   = "backend-lt"
-  image_id      = "ami-0ebfd941bbafe70c6"
+  provider      = aws.backend_account
+  name_prefix   = "backend-lt-"
+  image_id      = "ami-0ebfd941bbafe70c6" # Same ID if both accounts are in us-east-1
   instance_type = "t2.micro"
   vpc_security_group_ids = [aws_security_group.backend_sg.id]
 
   user_data = base64encode(<<-EOF
-              #!/bin/bash
-              yum update -y
-              yum install -y docker
-              service docker start
-              usermod -a -G docker ec2-user
-              docker run -d -p 80:80 ehpaucar/hola-mundo-aws:latest
-              EOF
+    #!/bin/bash
+    yum update -y
+    yum install -y docker
+    service docker start
+    usermod -a -G docker ec2-user
+    # BACKEND IMAGE
+    docker run -d -p 80:80 ehpaucar/hola-mundo-backend:latest
+  EOF
   )
 }
 
-# 4. ASG Backend (Fijo 2 instancias)
+# 4. Backend ALB
+resource "aws_lb" "backend_lb" {
+  provider           = aws.backend_account
+  name               = "backend-lb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.backend_sg.id]
+  subnets            = data.aws_subnets.backend_subnets.ids
+}
+
+resource "aws_lb_target_group" "backend_tg" {
+  provider = aws.backend_account
+  name     = "backend-tg"
+  port     = 80
+  protocol = "HTTP"
+  vpc_id   = data.aws_vpc.backend_vpc.id
+  health_check { path = "/" }
+}
+
+resource "aws_lb_listener" "backend_listener" {
+  provider          = aws.backend_account
+  load_balancer_arn = aws_lb.backend_lb.arn
+  port              = "80"
+  protocol          = "HTTP"
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.backend_tg.arn
+  }
+}
+
+# 5. Backend ASG (2 fixed instances as per requirement)
 resource "aws_autoscaling_group" "backend_asg" {
-  provider            = aws.backend
+  provider            = aws.backend_account
   name                = "backend-asg"
   vpc_zone_identifier = data.aws_subnets.backend_subnets.ids
+  target_group_arns   = [aws_lb_target_group.backend_tg.arn]
   desired_capacity    = 2
-  max_size            = 2
   min_size            = 2
+  max_size            = 2
+
   launch_template {
     id      = aws_launch_template.backend_lt.id
     version = "$Latest"
   }
+}
+
+# ==========================================
+# FINAL OUTPUTS
+# ==========================================
+output "frontend_dns" {
+  value = aws_lb.frontend_lb.dns_name
+  description = "Frontend URL (Account 1)"
+}
+
+output "backend_dns" {
+  value = aws_lb.backend_lb.dns_name
+  description = "Backend URL (Account 2)"
 }
